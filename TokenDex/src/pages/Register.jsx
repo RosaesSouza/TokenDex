@@ -2,26 +2,26 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import InputMask from 'react-input-mask'
 import logo from '../assets/logo.png'
+import { useWallet } from '../context/WalletContext'   // IMPORTANTE
 
 function validateCPF(cpf) {
-    cpf = cpf.replace(/\D/g, '')
-    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false
-  
-    const calcCheckDigit = (cpfSlice) => {
-      let sum = 0
-      for (let i = 0; i < cpfSlice.length; i++) {
-        sum += parseInt(cpfSlice[i]) * (cpfSlice.length + 1 - i)
-      }
-      let rest = (sum * 10) % 11
-      return rest === 10 ? 0 : rest
+  cpf = cpf.replace(/\D/g, '')
+  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false
+
+  const calcCheckDigit = (cpfSlice) => {
+    let sum = 0
+    for (let i = 0; i < cpfSlice.length; i++) {
+      sum += parseInt(cpfSlice[i]) * (cpfSlice.length + 1 - i)
     }
-  
-    const digit1 = calcCheckDigit(cpf.slice(0, 9))
-    const digit2 = calcCheckDigit(cpf.slice(0, 9) + digit1)
-    return digit1 === parseInt(cpf[9]) && digit2 === parseInt(cpf[10])
+    let rest = (sum * 10) % 11
+    return rest === 10 ? 0 : rest
+  }
+
+  const digit1 = calcCheckDigit(cpf.slice(0, 9))
+  const digit2 = calcCheckDigit(cpf.slice(0, 9) + digit1)
+  return digit1 === parseInt(cpf[9]) && digit2 === parseInt(cpf[10])
 }
 
-// Componente Toast
 function Toast({ message, type = "error", onClose }) {
   return (
     <div
@@ -44,85 +44,69 @@ export default function Register() {
   const [dob, setDob] = useState('')
   const [cpf, setCpf] = useState('')
   const [email, setEmail] = useState('')
-  const [wallet, setWallet] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [toast, setToast] = useState(null)
   const navigate = useNavigate()
 
+  // ⚡ PEGANDO A WALLET DO CONTEXT
+  const { wallet, connectMetaMask } = useWallet()
+
   const showToast = (message, type = "error") => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3000)
   }
+
   const registerUser = async () => {
-  try {
-    const response = await fetch("http://localhost:3000/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        dob,
-        cpf,
-        email,
-        wallet,
-        password
+    try {
+      const response = await fetch("http://localhost:3000/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          dob,
+          cpf,
+          email,
+          wallet,       // 🟢 agora vem da MetaMask real!
+          password
+        })
       })
-    })
 
-    const result = await response.json()
+      const result = await response.json()
 
-    if (!response.ok) {
-      showToast(result.error || "Erro ao registrar!", "error")
+      if (!response.ok) {
+        showToast(result.error || "Erro ao registrar!", "error")
+        return
+      }
+
+      showToast("Registro concluído com sucesso!", "success")
+      setTimeout(() => navigate("/login"), 500)
+
+    } catch (err) {
+      showToast("Erro ao conectar ao servidor!", "error")
+    }
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+
+    if (password !== confirmPassword) {
+      showToast('As senhas não coincidem!', 'error')
       return
     }
 
-    showToast("Registro concluído com sucesso!", "success")
-    setTimeout(() => navigate("/login"), 500)
-
-  } catch (err) {
-    showToast("Erro ao conectar ao servidor!", "error")
-  }
-}
-
- const handleSubmit = (e) => {
-  e.preventDefault()
-
-  if (password !== confirmPassword) {
-    showToast('As senhas não coincidem!', 'error')
-    return
-  }
-
-  if (!validateCPF(cpf)) {
-    showToast('CPF inválido!', 'error')
-    return
-  }
-
-  // Tudo validado → agora registra
-  registerUser()
-}
-
-
-  const connectMetaMask = async () => {
-   try {
-    if (!window.ethereum) {
-      showToast("MetaMask não encontrada! Instale a extensão.", "error")
+    if (!validateCPF(cpf)) {
+      showToast('CPF inválido!', 'error')
       return
     }
 
-    const accounts = await window.ethereum.request({
-      method: "eth_requestAccounts",
-    })
-
-    if (accounts.length > 0) {
-      const account = accounts[0]
-      setWallet(account)
-      showToast("Carteira conectada com sucesso!", "success")
+    if (!wallet) {
+      showToast('Conecte sua MetaMask antes de registrar!', 'error')
+      return
     }
-  } catch (error) {
-    console.error(error)
-    showToast("Erro ao conectar a MetaMask!", "error")
+
+    registerUser()
   }
-}
 
 
   return (
@@ -150,6 +134,7 @@ export default function Register() {
                 className="w-full p-2 ring-red-900 ring-4 bg-secondary rounded-sm focus:ring-red-950"
               />
             </div>
+
             <div className="w-36">
               <label className="block text-white mb-1">Data de Nasc.</label>
               <input
@@ -165,18 +150,18 @@ export default function Register() {
           <div>
             <label className="block text-white mb-1">CPF</label>
             <InputMask
-                mask="999.999.999-99"
-                value={cpf}
-                onChange={(e) => setCpf(e.target.value)}
+              mask="999.999.999-99"
+              value={cpf}
+              onChange={(e) => setCpf(e.target.value)}
             >
-                {(inputProps) => (
+              {(inputProps) => (
                 <input
-                    {...inputProps}
-                    type="text"
-                    required
-                    className="w-full p-2 ring-red-900 ring-4 bg-secondary rounded-sm focus:ring-red-950"
+                  {...inputProps}
+                  type="text"
+                  required
+                  className="w-full p-2 ring-red-900 ring-4 bg-secondary rounded-sm focus:ring-red-950"
                 />
-                )}
+              )}
             </InputMask>
           </div>
 
@@ -196,12 +181,10 @@ export default function Register() {
             <div className="flex gap-2">
               <input
                 type="text"
-                value={wallet}
-                onChange={(e) => setWallet(e.target.value)}
-                required
-                className="w-full p-2 ring-red-900 ring-4 bg-secondary rounded-sm focus:ring-red-950"
-                placeholder="Endereço da carteira"
+                value={wallet || ""}
                 readOnly
+                className="w-full p-2 ring-red-900 ring-4 bg-secondary rounded-sm"
+                placeholder="Conecte para continuar"
               />
 
               <button
@@ -213,6 +196,7 @@ export default function Register() {
               </button>
             </div>
           </div>
+
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="block text-white mb-1">Senha</label>
